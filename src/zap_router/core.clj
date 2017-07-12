@@ -13,28 +13,32 @@
       (s/put! main-stream (.getBytes "player1:START:player2" "UTF-8"))
       (s/put! main-stream (.getBytes "player2:START:player1" "UTF-8")))))
 
-(defn echo-handler [player opponent main-stream player-stream info]
-  (register! player player-stream main-stream)
+(defn echo-handler [player-id main-stream player-stream info]
+  (register! (keyword (str "player" (swap! player-id inc))) player-stream main-stream)
   (s/connect player-stream main-stream))
 
-(defn run []
-  (let [main-stream (s/stream)]
+(defn run [port]
+  (let [player-id (atom 0)
+        main-stream (s/stream)
+        server (tcp/start-server (partial echo-handler player-id main-stream) {:port port})]
     (println "ZapRouter Running")
-    (future
-      (tcp/start-server (partial echo-handler :player1 :player2 main-stream) {:port 10001})
-      (tcp/start-server (partial echo-handler :player2 :player1 main-stream) {:port 10002}))
-    (loop []
-      (try
-        (let [input @(s/take! main-stream)
-              [target cmd params] (clojure.string/split (String. input "UTF-8") #":")]
-          (println "Got input" target cmd params)
-          (doseq [[player output-stream] (:players @config)]
-            (when (= (name player) target)
-              (println "Sending to" target)
-              @(s/put! output-stream (str cmd ":" params)))))
-        (catch Exception e
-          (println "Exception" e)))
-      (recur))))
+    (a/go-loop []
+               (try
+                 (let [input @(s/take! main-stream)
+                       [target cmd params] (clojure.string/split (String. input "UTF-8") #":")]
+                   (println "Got input" target cmd params)
+                   (doseq [[player output-stream] (:players @config)]
+                     (when (= (name player) target)
+                       (println "Sending to" target)
+                       @(s/put! output-stream (str cmd ":" params)))))
+                 (catch Exception e
+                   (println "Exception" e)))
+               (recur))
+    server))
 
 (defn -main [& args]
-  (run))
+  (let [signal (java.util.concurrent.CountDownLatch. 1)]
+    (run 10001)
+    (.await signal)))
+
+ ;     (.close (tcp/start-server (partial echo-handler :player1 :player2 (s/stream)) {:port 10004}))
