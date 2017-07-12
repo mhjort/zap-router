@@ -9,6 +9,7 @@
   (println "Registering player" player "with stream" stream)
   (let [{:keys [players]} (swap! config #(update-in % [:players] assoc player stream))]
     (when (= 2 (count players))
+      (println "Players registered")
       (s/put! main-stream (.getBytes "player1:START:player2" "UTF-8"))
       (s/put! main-stream (.getBytes "player2:START:player1" "UTF-8")))))
 
@@ -29,6 +30,7 @@
           (println "Got input" target cmd params)
           (doseq [[player output-stream] (:players @config)]
             (when (= (name player) target)
+              (println "Sending to" target)
               @(s/put! output-stream (str cmd ":" params)))))
         (catch Exception e
           (println "Exception" e)))
