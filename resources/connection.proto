@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package zaprouter;
+
+message RegisterRequest {
+  string clientId = 1;
+}
+
+message RegisterResponse {
+  string clientId = 1;
+  bool success = 2;
+}

@@ -16,5 +16,6 @@
   (go (>! out (.getBytes (str target ":" msg ":" arg) "UTF-8"))))
 
 (defn read-msg! [in]
-  (let [raw (<!! in)]
-    (String. raw "UTF-8")))
+  (let [raw (<!! in)
+        response (zaprouter.Connection$RegisterResponse/parseFrom raw)]
+    response))

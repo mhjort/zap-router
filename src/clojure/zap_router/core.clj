@@ -1,17 +1,24 @@
 (ns zap-router.core
   (:require [aleph.tcp :as tcp]
             [clojure.core.async :as a]
-            [manifold.stream :as s]))
+            [manifold.stream :as s])
+  (:import [zaprouter Connection]))
 
 (def config (atom {:players {}}))
+
+(defn register-response [player-id]
+  (-> (zaprouter.Connection$RegisterResponse/newBuilder)
+      (.setClientId player-id)
+      (.setSuccess true)
+      (.build)))
 
 (defn- register! [player stream main-stream]
   (println "Registering player" player "with stream" stream)
   (let [{:keys [players]} (swap! config #(update-in % [:players] assoc player stream))]
     (when (= 2 (count players))
       (println "Players registered")
-      (s/put! main-stream (.getBytes "player1:START:player2" "UTF-8"))
-      (s/put! main-stream (.getBytes "player2:START:player1" "UTF-8")))))
+      (s/put! main-stream {:client "player1" :msg (register-response "player1")})
+      (s/put! main-stream {:client "player2" :msg (register-response "player2")}))))
 
 (defn echo-handler [player-id main-stream player-stream info]
   (register! (keyword (str "player" (swap! player-id inc))) player-stream main-stream)
@@ -24,13 +31,12 @@
     (println "ZapRouter Running")
     (a/go-loop []
                (try
-                 (let [input @(s/take! main-stream)
-                       [target cmd params] (clojure.string/split (String. input "UTF-8") #":")]
-                   (println "Got input" target cmd params)
+                 (let [{:keys [client msg]} @(s/take! main-stream)]
+                   (println "Got input for" client "with msg" (.toString msg))
                    (doseq [[player output-stream] (:players @config)]
-                     (when (= (name player) target)
-                       (println "Sending to" target)
-                       @(s/put! output-stream (str cmd ":" params)))))
+                     (when (= (name player) client)
+                       (println "Sending to" client)
+                       @(s/put! output-stream (.toByteArray msg)))))
                  (catch Exception e
                    (println "Exception" e)))
                (recur))
